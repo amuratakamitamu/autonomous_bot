@@ -51,6 +51,8 @@ colcon build --packages-select autonomous_bot_nav
 source install/setup.bash
 ```
 
+以降の相対パスを含むコマンドは、ワークスペースのルートで実行する前提です。
+
 ## 地図を作成する
 
 先にロボットまたはGazeboワールドを起動し、その後SLAMを起動します。
@@ -59,7 +61,7 @@ source install/setup.bash
 ros2 launch autonomous_bot_nav mapping.launch.py
 ```
 
-RViz上の地図が必要な範囲を覆うまでロボットを走らせます。完了したら、地図を保存します。
+RViz上の地図が必要な範囲を覆うまでロボットを走らせます。完了したら、ワークスペースのルートで地図を保存します。
 
 ```bash
 ros2 run nav2_map_server map_saver_cli -f src/autonomous_bot_nav/maps/map
@@ -88,6 +90,12 @@ ros2 launch autonomous_bot_nav mapping.launch.py use_sim_time:=false
 
 ```bash
 ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml
+```
+
+`src` ディレクトリ内から実行する場合は、地図パスを次のように指定します。
+
+```bash
+ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/autonomous_bot_nav/maps/map.yaml
 ```
 
 RVizが開いたら、**2D Pose Estimate** で地図上のロボット姿勢を設定します。

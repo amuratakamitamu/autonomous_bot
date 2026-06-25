@@ -41,7 +41,7 @@ def generate_launch_description():
             raise RuntimeError(
                 f"Map YAML file does not exist: {map_path}\n"
                 "Pass a real map path, for example: "
-                "map:=$PWD/maps/map.yaml"
+                "map:=$PWD/src/autonomous_bot_nav/maps/map.yaml"
             )
         return []
 
