@@ -98,6 +98,16 @@ ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot
 
 角度はラジアンで指定します。
 
+### 6. AMCLのglobal localizationを使う
+
+初期姿勢を正確に設定しにくい場合は、AMCLのglobal localizationを使えます。
+
+```bash
+ros2 service call /reinitialize_global_localization std_srvs/srv/Empty {}
+```
+
+サービス呼び出し後、レーザースキャンが地図と合うまで、ロボットをその場でゆっくり回転させるか少し動かしてください。
+
 ## よく使うコマンド
 
 Gazebo起動:
@@ -128,4 +138,10 @@ ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot
 
 ```bash
 ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml use_sim_time:=false
+```
+
+AMCLのglobal localization:
+
+```bash
+ros2 service call /reinitialize_global_localization std_srvs/srv/Empty {}
 ```
