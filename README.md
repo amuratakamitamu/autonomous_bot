@@ -1,126 +1,96 @@
-# autonomous_bot_nav
+# autonomous_bot
 
-`autonomous_bot_nav` は、Gazebo上のTurtleBot系ロボット、または同等の差動二輪ロボットをNav2で自律走行させるためのROS 2パッケージです。
+Gazebo上のTurtleBot3を使って、SLAMによる地図作成からNav2による自律走行までを試すROS 2ワークスペースです。
 
-SLAM Toolboxによる地図作成、保存済み地図を使ったAMCL自己位置推定、Nav2の経路計画と追従、RVizでの可視化、初期姿勢とゴールを送る簡易クライアントを含みます。
-
-## 主な機能
-
-- `slam_toolbox` を使った地図作成
-- `nav2_bringup` を使ったNav2起動
-- AMCLによる保存済み地図上での自己位置推定
-- RViz設定ファイル付きの地図作成・ナビゲーション表示
-- `nav_goal_client` による初期姿勢publishと `NavigateToPose` ゴール送信
-- Gazebo向けの `use_sim_time:=true` と、実機向けの `use_sim_time:=false` の切り替え
+主要パッケージは `src/autonomous_bot_nav` にあります。詳細なパラメータやlaunch引数は [src/autonomous_bot_nav/README.md](src/autonomous_bot_nav/README.md) を参照してください。
 
 ## 前提
 
-このパッケージは、次のトピックとTF構成を前提にしています。
+- ROS 2がインストール済み
+- `turtlebot3_gazebo`、`turtlebot3_teleop`、`nav2_bringup`、`slam_toolbox` などが利用可能
 
-- LaserScan: `/scan`
-- Odometry: `/odom`
-- TF: `map -> odom -> base_footprint`
-
-名前が異なる場合は、`config/nav2_params.yaml` と `config/slam_toolbox_params.yaml` を環境に合わせて変更してください。
-
-## 依存パッケージ
-
-主な依存は以下です。
-
-- `nav2_bringup`
-- `nav2_amcl`
-- `nav2_map_server`
-- `nav2_planner`
-- `nav2_controller`
-- `nav2_bt_navigator`
-- `slam_toolbox`
-- `rviz2`
-
-依存関係は `package.xml` に定義されています。ROS 2環境をsourceしたうえで、必要に応じて `rosdep` を使ってインストールしてください。
+不足している依存関係は、ワークスペースのルートで次のようにインストールします。
 
 ```bash
-rosdep install --from-paths . --ignore-src -r -y
+rosdep install --from-paths src --ignore-src -r -y
 ```
 
 ## ビルド
-
-ワークスペースのルートでビルドします。
 
 ```bash
 colcon build --packages-select autonomous_bot_nav
 source install/setup.bash
 ```
 
-## 地図を作成する
+以降のコマンドは、必要に応じて各ターミナルでROS 2環境とこのワークスペースをsourceしてから実行します。
 
-先にロボットまたはGazeboワールドを起動し、その後SLAMを起動します。
+```bash
+source /opt/ros/$ROS_DISTRO/setup.bash
+source install/setup.bash
+export TURTLEBOT3_MODEL=burger
+```
+
+## 全体の流れ
+
+### 1. GazeboでTurtleBot3 worldを起動する
+
+ターミナル1でGazeboを起動します。
+
+```bash
+source /usr/share/gazebo/setup.sh
+export TURTLEBOT3_MODEL=waffle_pi
+ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
+```
+
+このlaunchにより、Gazebo上にTurtleBot3、`/scan`、`/odom`、TF、`/clock` などが立ち上がります。
+
+### 2. SLAMを起動して地図を作る
+
+ターミナル2でSLAM ToolboxとRVizを起動します。
 
 ```bash
 ros2 launch autonomous_bot_nav mapping.launch.py
 ```
 
-RViz上の地図が必要な範囲を覆うまでロボットを走らせます。完了したら、地図を保存します。
+RVizで地図が表示されたら、ターミナル3でTurtleBot3を操作してワールド内を走らせます。
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f maps/map
+ros2 run turtlebot3_teleop teleop_keyboard
 ```
 
-これにより、以下のファイルが作成されます。
-
-- `maps/map.yaml`
-- `maps/map.pgm`
-
-RVizなしで地図作成を実行する場合は、次のように起動します。
+地図が必要な範囲を覆ったら、ターミナル4で保存します。
 
 ```bash
-ros2 launch autonomous_bot_nav mapping.launch.py use_rviz:=false
+ros2 run nav2_map_server map_saver_cli -f src/autonomous_bot_nav/maps/map
 ```
 
-実機で `/clock` トピックを使わない場合は、`use_sim_time:=false` を指定します。
+保存後、次のファイルが作成または更新されます。
+
+- `src/autonomous_bot_nav/maps/map.yaml`
+- `src/autonomous_bot_nav/maps/map.pgm`
+
+### 3. 保存した地図でNav2を起動する
+
+地図作成用のlaunchを止めてから、ターミナル2でNav2を起動します。Gazeboは起動したままにします。
 
 ```bash
-ros2 launch autonomous_bot_nav mapping.launch.py use_sim_time:=false
+ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml
 ```
 
-## 保存済み地図でナビゲーションする
+RVizが開いたら、**2D Pose Estimate** で地図上のロボットの初期姿勢を設定します。
+ロボットがいる位置をクリックし、ロボットの正面方向へドラッグして離します。
 
-保存済み地図を指定してNav2を起動します。
+### 4. RVizからゴールを送る
 
-```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml
-```
+RVizの **Nav2 Goal** を選び、移動させたい位置をクリックして向きをドラッグします。
+Nav2が経路を計画し、Gazebo上のTurtleBot3がゴールへ移動します。
 
-RVizが開いたら、**2D Pose Estimate** で地図上のロボット姿勢を設定します。
-ロボットがいる位置をクリックし、ロボットの前方方向へドラッグしてから離してください。
+### 5. launch引数で初期姿勢とゴールを送る
 
-この初期姿勢は、AMCLがレーザースキャンを地図へ正しく合わせるために必要です。姿勢を設定するまでは、`AMCL cannot publish a pose` や `map frame does not exist` のような警告が出ることがあります。
-
-RVizなしで起動する場合は、次のように指定します。
+RViz操作の代わりに、`nav_goal_client` から初期姿勢とゴールを送ることもできます。
 
 ```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml use_rviz:=false
-```
-
-実機で使う場合は、`use_sim_time:=false` を指定します。
-
-```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml use_sim_time:=false
-```
-
-## 初期姿勢とゴールをlaunchから送る
-
-`nav_goal_client` を起動すると、RVizを使わずに初期姿勢をpublishできます。
-
-```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml \
-  start_goal_client:=true publish_initial_pose:=true \
-  initial_x:=0.0 initial_y:=0.0 initial_yaw:=0.0
-```
-
-ナビゲーションゴールも送る場合は、`send_goal:=true` とゴール座標を指定します。
-
-```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml \
+ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml \
   start_goal_client:=true publish_initial_pose:=true send_goal:=true \
   initial_x:=0.0 initial_y:=0.0 initial_yaw:=0.0 \
   goal_x:=1.0 goal_y:=0.0 goal_yaw:=0.0
@@ -128,48 +98,13 @@ ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml \
 
 角度はラジアンで指定します。
 
-## AMCLのglobal localizationを使う
+## よく使うコマンド
 
-初期姿勢を正確に設定しにくい場合は、AMCLのglobal localizationを使えます。
-
-```bash
-ros2 service call /reinitialize_global_localization std_srvs/srv/Empty {}
-```
-
-サービス呼び出し後、レーザースキャンが地図と合うまで、ロボットをその場でゆっくり回転させるか少し動かしてください。直後にロボット姿勢が地図中央付近に見えることがありますが、AMCLのパーティクルが地図全体に広がっている間は正常な挙動です。
-
-## 地図ファイル
-
-`navigation.launch.py` の `map` 引数には、実際に存在する地図YAMLファイルを指定する必要があります。
+Gazebo起動:
 
 ```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=/absolute/path/to/map.yaml
+ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
 ```
-
-地図YAMLは、たとえば次のように地図画像を参照します。
-
-```yaml
-image: map.pgm
-mode: trinary
-resolution: 0.05
-origin: [0.0, 0.0, 0.0]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.25
-```
-
-## 主要ファイル
-
-- `launch/mapping.launch.py`: SLAM ToolboxとRVizを起動するlaunchファイル
-- `launch/navigation.launch.py`: Nav2、RViz、任意で `nav_goal_client` を起動するlaunchファイル
-- `config/slam_toolbox_params.yaml`: 地図作成用のSLAM Toolbox設定
-- `config/nav2_params.yaml`: AMCL、Planner、Controller、CostmapなどのNav2設定
-- `src/nav_goal_client.cpp`: 初期姿勢とナビゲーションゴールを送るC++ノード
-- `rviz/mapping.rviz`: 地図作成用RViz設定
-- `rviz/nav2_default.rviz`: ナビゲーション用RViz設定
-- `maps/`: 保存済み地図を置くディレクトリ
-
-## よく使う起動コマンド
 
 地図作成:
 
@@ -177,23 +112,20 @@ free_thresh: 0.25
 ros2 launch autonomous_bot_nav mapping.launch.py
 ```
 
+地図保存:
+
+```bash
+ros2 run nav2_map_server map_saver_cli -f src/autonomous_bot_nav/maps/map
+```
+
 保存済み地図でNav2起動:
 
 ```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml
+ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml
 ```
 
-実機向けNav2起動:
+実機など `/clock` を使わない環境:
 
 ```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml use_sim_time:=false
-```
-
-初期姿勢とゴールを送信:
-
-```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/maps/map.yaml \
-  start_goal_client:=true publish_initial_pose:=true send_goal:=true \
-  initial_x:=0.0 initial_y:=0.0 initial_yaw:=0.0 \
-  goal_x:=1.0 goal_y:=0.0 goal_yaw:=0.0
+ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml use_sim_time:=false
 ```
