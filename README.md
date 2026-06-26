@@ -221,7 +221,7 @@ TF:        map -> odom -> base_footprint
 - 経路追従 Controller: Regulated Pure Pursuit
   - 設定名: `FollowPath`
   - プラグイン: `nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController`
-  - 目標並進速度: `desired_linear_vel: 0.25`
+  - 目標並進速度: `desired_linear_vel: 0.4`
   - 回頭時の角速度: `rotate_to_heading_angular_vel: 1.0`
   - 障害物衝突チェック: `use_collision_detection: true`
 - Local costmap
@@ -240,7 +240,7 @@ TF:        map -> odom -> base_footprint
   - `AssistedTeleop`
   - `Wait`
 - Velocity smoother
-  - 最大速度: `[0.26, 0.0, 1.0]`
+  - 最大速度: `[0.4, 0.0, 1.0]`
   - 最小速度: `[-0.26, 0.0, -1.0]`
   - フィードバック方式: `OPEN_LOOP`
 
