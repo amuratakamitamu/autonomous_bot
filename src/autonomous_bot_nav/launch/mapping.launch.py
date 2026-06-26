@@ -24,7 +24,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value=""),
         DeclareLaunchArgument("slam_params_file", default_value=default_slam_params),
         DeclareLaunchArgument("rviz_config", default_value=default_rviz_config),
-        DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
 
         Node(

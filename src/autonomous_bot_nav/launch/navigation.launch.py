@@ -50,7 +50,7 @@ def generate_launch_description():
         DeclareLaunchArgument("map", description="Full path to the map yaml file."),
         DeclareLaunchArgument("params_file", default_value=default_params),
         DeclareLaunchArgument("rviz_config", default_value=default_rviz_config),
-        DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("autostart", default_value="true"),
         DeclareLaunchArgument("use_composition", default_value="True"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
