@@ -16,7 +16,7 @@ rosdep install --from-paths src --ignore-src -r -y
 ## Build
 
 ```bash
-colcon build --packages-select autonomous_bot_nav
+colcon build --packages-select autonomous_bot_nav emcl2
 source install/setup.sh
 ```
 
@@ -65,8 +65,8 @@ ros2 run nav2_map_server map_saver_cli -f src/autonomous_bot_nav/maps/map
 
 自己位置推定のアルゴリズムを変更したい場合，`localization:=`パラメータを変更すること
 
-- `localization:=amcl`（デフォルト）
-- `localization:=emcl2`
+- `localization:=emcl2`（デフォルト）
+- `localization:=amcl`
 
 #### Simulator
 
@@ -90,90 +90,174 @@ RVizからゴールの2D Poseを指定
 
 ## 現在の構成
 
-このワークスペースは、`autonomous_bot_nav` という単一のROS 2パッケージで構成されています。
-Gazebo上のTurtleBot3など、外部で起動したロボットから `/scan`、`/odom`、TFを受け取り、このパッケージ側でSLAMによる地図作成とNav2による自律走行を行います。
+このワークスペースは、Nav2を中心にした地図作成・自己位置推定・経路計画・追従の構成です。
 
 ```text
-autonomous_bot/
+autonomous_bot
 ├── README.md
-├── src/
-│   └── autonomous_bot_nav/
-│       ├── package.xml
-│       ├── CMakeLists.txt
-│       ├── launch/
-│       │   ├── mapping.launch.py
-│       │   └── navigation.launch.py
-│       ├── config/
-│       │   ├── slam_toolbox_params.yaml
-│       │   └── nav2_params.yaml
-│       ├── maps/
-│       │   ├── map.yaml
-│       │   └── map.pgm
-│       └── rviz/
-│           ├── mapping.rviz
-│           └── nav2_default.rviz
-├── build/
-├── install/
-└── log/
+└── src
+    ├── autonomous_bot_nav
+    │   ├── config
+    │   │   ├── nav2_params.yaml
+    │   │   ├── emcl2_params.yaml
+    │   │   └── slam_toolbox_params.yaml
+    │   ├── launch
+    │   │   ├── mapping.launch.py
+    │   │   └── navigation.launch.py
+    │   ├── maps
+    │   └── rviz
+    └── emcl2_ros2
+        ├── config
+        ├── launch
+        ├── include
+        └── src
 ```
 
-主なファイルの役割は次の通りです。
+### パッケージ
 
-- `src/autonomous_bot_nav/launch/mapping.launch.py`: `slam_toolbox` とRVizを起動して地図を作成します。
-- `src/autonomous_bot_nav/launch/navigation.launch.py`: 保存済み地図を使ってNav2、AMCL、RVizを起動します。
-- `src/autonomous_bot_nav/config/slam_toolbox_params.yaml`: SLAM Toolboxの地図作成用パラメータです。
-- `src/autonomous_bot_nav/config/nav2_params.yaml`: AMCL、Planner、Controller、CostmapなどのNav2設定です。
-- `src/autonomous_bot_nav/maps/`: 保存済み地図の `map.yaml` と `map.pgm` を置くディレクトリです。
-- `src/autonomous_bot_nav/rviz/`: 地図作成用とナビゲーション用のRViz設定を置くディレクトリです。
+- `autonomous_bot_nav`
+  - このリポジトリ側のナビゲーション設定パッケージ
+  - Nav2、SLAM Toolbox、RViz、地図ファイル、起動ファイルをまとめている
+  - C++/Pythonノードは持たず、`config`、`launch`、`maps`、`rviz`をインストールする
+- `emcl2`
+  - `src/emcl2_ros2`に配置されている外部自己位置推定パッケージ
+  - パッケージ名は`emcl2`
+  - `emcl2_node`を起動し、AMCLの代わりに`map -> odom`の自己位置推定TFを担当する
 
-前提としている主なトピックとTF構成は次の通りです。
+### Nav2で使っているもの
 
-```text
-LaserScan: /scan
-Odometry:  /odom
-TF:        map -> odom -> base_footprint
-```
+`src/autonomous_bot_nav/config/nav2_params.yaml`で、以下のNav2コンポーネントを使っています。
 
-全体の流れは、TurtleBot3 Gazeboを起動し、`mapping.launch.py` で地図を作成して保存し、その地図を `navigation.launch.py` に渡してAMCL自己位置推定とNav2ゴール走行を行う構成です。
+- 自己位置推定
+  - `localization:=emcl2`の場合: `emcl2`パッケージの`emcl2_node`
+  - `localization:=amcl`の場合: Nav2標準の`nav2_amcl`
+- 地図配信
+  - `nav2_map_server`
+  - `map` launch引数で指定したYAML地図を配信する
+- Behavior Treeナビゲーション
+  - `nav2_bt_navigator`
+  - `NavigateToPose`、`NavigateThroughPoses`、経路計算、経路追従、リカバリ、キャンセル系BTノードを使用する
+- Controller
+  - `nav2_controller`
+  - ローカルプランナは`dwb_core::DWBLocalPlanner`
+  - 進捗チェックは`nav2_controller::SimpleProgressChecker`
+  - ゴール判定は`nav2_controller::SimpleGoalChecker`
+- Planner
+  - `nav2_planner`
+  - グローバルプランナは`nav2_navfn_planner/NavfnPlanner`
+  - `use_astar: false`なのでDijkstra系のNavFnとして使う
+- Costmap
+  - `nav2_costmap_2d`
+  - local costmap: `VoxelLayer` + `InflationLayer`
+  - global costmap: `StaticLayer` + `ObstacleLayer` + `InflationLayer`
+  - 障害物入力は`/scan`
+- Smoother
+  - `nav2_smoother::SimpleSmoother`
+- Recovery / Behavior
+  - `nav2_behaviors`
+  - `Spin`、`BackUp`、`DriveOnHeading`、`AssistedTeleop`、`Wait`
+- Waypoint
+  - `nav2_waypoint_follower::WaitAtWaypoint`
+- 速度平滑化
+  - `nav2_velocity_smoother`
+- Lifecycle
+  - `nav2_lifecycle_manager`
+  - EMCL2構成では`map_server`用のlifecycle managerをこのパッケージ側で起動する
 
-## Nav2の内部構成
+### Nav2以外の外部パッケージ
 
-このパッケージのNav2設定では、自己位置推定、経路計画、経路追従に次の構成を使っています。
+- `slam_toolbox`
+  - `mapping.launch.py`で`async_slam_toolbox_node`を起動する
+  - `/scan`と`odom`から地図を作成する
+- `emcl2`
+  - AMCLの代替として使う自己位置推定パッケージ
+  - `src/emcl2_ros2`にソースがある
+- `turtlebot3_gazebo`
+  - シミュレーション用のTurtleBot3 world、ロボット、センサ、TF、`/clock`を起動する
+- `turtlebot3_teleop`
+  - 地図作成時に`/cmd_vel`へ速度指令を出すために使う
+- `rviz2`
+  - 地図作成用とナビゲーション用の可視化に使う
 
-- 自己位置推定: AMCL
-  - ノード設定: `amcl`
-  - 使用モデル: `nav2_amcl::DifferentialMotionModel`
-  - 入力: `/scan`, `/odom`
-  - フレーム: `map`, `odom`, `base_footprint`
-- 経路計画 Planner: NavfnPlanner
-  - 設定名: `GridBased`
-  - プラグイン: `nav2_navfn_planner/NavfnPlanner`
-  - `use_astar: true` のため、A*ベースでグローバル経路を作成します。
-  - `allow_unknown: true` のため、未知領域も経路候補に含めます。
-- 経路追従 Controller: Regulated Pure Pursuit
-  - 設定名: `FollowPath`
-  - プラグイン: `nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController`
-  - 目標並進速度: `desired_linear_vel: 0.4`
-  - 回頭時の角速度: `rotate_to_heading_angular_vel: 1.0`
-  - 障害物衝突チェック: `use_collision_detection: true`
-- Local costmap
-  - `voxel_layer`
-  - `inflation_layer`
-  - 入力: `/scan`
-- Global costmap
-  - `static_layer`
-  - `obstacle_layer`
-  - `inflation_layer`
-  - 入力: `/scan`
-- Behavior / Recovery
-  - `Spin`
-  - `BackUp`
-  - `DriveOnHeading`
-  - `AssistedTeleop`
-  - `Wait`
-- Velocity smoother
-  - 最大速度: `[0.4, 0.0, 1.0]`
-  - 最小速度: `[-0.26, 0.0, -1.0]`
-  - フィードバック方式: `OPEN_LOOP`
+### launchファイル
 
-まとめると、AMCLで自己位置を推定し、NavfnPlannerが保存済み地図とCostmapから大域経路を作り、Regulated Pure Pursuit Controllerがその経路を追従します。障害物情報は `/scan` を使ってLocal/Global costmapに反映されます。
+#### `src/autonomous_bot_nav/launch/mapping.launch.py`
+
+SLAMで地図を作るためのlaunchです。
+
+起動するもの:
+
+- `slam_toolbox`の`async_slam_toolbox_node`
+- `rviz2`（`use_rviz:=true`の場合）
+
+主なlaunch引数:
+
+- `namespace`
+- `slam_params_file`
+  - デフォルト: `config/slam_toolbox_params.yaml`
+- `rviz_config`
+  - デフォルト: `rviz/mapping.rviz`
+- `use_sim_time`
+- `use_rviz`
+
+このlaunchはGazeboや実機側のロボットドライバは起動しません。別ターミナルでTurtleBot3 Gazeboまたは実機のセンサ・オドメトリ・TFを起動してから使います。
+
+#### `src/autonomous_bot_nav/launch/navigation.launch.py`
+
+保存済み地図を使ってNav2を起動するlaunchです。
+
+共通で起動するもの:
+
+- `rviz2`（`use_rviz:=true`の場合）
+
+`localization:=amcl`の場合:
+
+- `nav2_bringup/launch/bringup_launch.py`をincludeする
+- Nav2標準の`amcl`、`map_server`、planner、controller、BT navigatorなどをまとめて起動する
+
+`localization:=emcl2`または`localization:=emcl`の場合:
+
+- `nav2_map_server`の`map_server`
+- `emcl2`パッケージの`emcl2_node`
+- `nav2_lifecycle_manager`の`lifecycle_manager_map_server`
+- `nav2_bringup/launch/navigation_launch.py`
+- `use_composition:=true`の場合は`rclcpp_components`の`component_container_isolated`
+
+主なlaunch引数:
+
+- `map`
+  - 使用する地図YAMLへのフルパス
+  - 存在しない場合はlaunch時にエラーになる
+- `params_file`
+  - デフォルト: `config/nav2_params.yaml`
+- `emcl2_params_file`
+  - デフォルト: `config/emcl2_params.yaml`
+- `rviz_config`
+  - デフォルト: `rviz/nav2_default.rviz`
+- `use_sim_time`
+- `localization`
+  - `emcl2`、`emcl`、`amcl`
+- `use_rviz`
+- `autostart`
+- `use_composition`
+- `use_respawn`
+- `namespace`
+- `use_namespace`
+
+### 設定ファイル
+
+- `config/nav2_params.yaml`
+  - Nav2全体のパラメータ
+  - AMCL、BT Navigator、Controller、Costmap、Map Server、Planner、Smoother、Behavior、Waypoint Follower、Velocity Smootherを設定する
+- `config/emcl2_params.yaml`
+  - `emcl2_node`用のパラメータ
+  - フレーム名、初期姿勢、粒子数、オドメトリモデル、センサリセットなどを設定する
+- `config/slam_toolbox_params.yaml`
+  - SLAM Toolbox用のパラメータ
+  - `map`、`odom`、`base_footprint`、`/scan`を使うmappingモードの設定
+- `rviz/mapping.rviz`
+  - 地図作成用RViz設定
+- `rviz/nav2_default.rviz`
+  - Nav2操作用RViz設定
+- `maps/*.yaml`、`maps/*.pgm`
+  - 保存済み地図

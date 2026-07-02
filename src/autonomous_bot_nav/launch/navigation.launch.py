@@ -4,7 +4,13 @@ from ament_index_python.packages import get_package_share_directory
 from ament_index_python.packages import get_package_prefix
 from ament_index_python.packages import PackageNotFoundError
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
@@ -21,6 +27,7 @@ def generate_launch_description():
     default_params = os.path.join(pkg_share, "config", "nav2_params.yaml")
     default_emcl2_params = os.path.join(pkg_share, "config", "emcl2_params.yaml")
     default_rviz_config = os.path.join(pkg_share, "rviz", "nav2_default.rviz")
+    default_map = os.path.join(pkg_share, "maps", "map.yaml")
     bringup_launch = os.path.join(nav2_share, "launch", "bringup_launch.py")
     navigation_launch = os.path.join(nav2_share, "launch", "navigation_launch.py")
 
@@ -45,6 +52,10 @@ def generate_launch_description():
     use_emcl2 = PythonExpression(["'", localization, "' in ['emcl', 'emcl2']"])
 
     remappings = [("/tf", "tf"), ("/tf_static", "tf_static")]
+    emcl2_remappings = remappings + [
+        ("particlecloud", "particle_cloud"),
+        ("global_localization", "reinitialize_global_localization"),
+    ]
 
     configured_map_server_params = ParameterFile(
         RewrittenYaml(
@@ -103,9 +114,15 @@ def generate_launch_description():
         return []
 
     return LaunchDescription([
+        SetEnvironmentVariable("RCUTILS_LOGGING_BUFFERED_STREAM", "1"),
+
         DeclareLaunchArgument("namespace", default_value=""),
         DeclareLaunchArgument("use_namespace", default_value="false"),
-        DeclareLaunchArgument("map", description="Full path to the map yaml file."),
+        DeclareLaunchArgument(
+            "map",
+            default_value=default_map,
+            description="Full path to the map yaml file.",
+        ),
         DeclareLaunchArgument("params_file", default_value=default_params),
         DeclareLaunchArgument("emcl2_params_file", default_value=default_emcl2_params),
         DeclareLaunchArgument("rviz_config", default_value=default_rviz_config),
@@ -117,7 +134,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_rviz", default_value="true"),
         DeclareLaunchArgument(
             "localization",
-            default_value="amcl",
+            default_value="emcl2",
             description="Localization backend: amcl or emcl2.",
         ),
         DeclareLaunchArgument("emcl2_package", default_value="emcl2"),
@@ -184,7 +201,7 @@ def generate_launch_description():
                         {"use_sim_time": use_sim_time},
                     ],
                     arguments=["--ros-args", "--log-level", log_level],
-                    remappings=remappings,
+                    remappings=emcl2_remappings,
                 ),
                 Node(
                     package="nav2_lifecycle_manager",
