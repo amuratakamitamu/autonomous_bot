@@ -27,6 +27,9 @@ source install/setup.sh
 ターミナル1でGazeboを起動します。
 
 ```bash
+pkill -f gzserver
+pkill -f gzclient
+pkill -f gazebo
 source /usr/share/gazebo/setup.sh
 export TURTLEBOT3_MODEL=burger
 ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
