@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(autonomous_bot_nav)
+project(autonomous_nav)
 
 find_package(ament_cmake REQUIRED)
 

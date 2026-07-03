@@ -21,7 +21,7 @@ from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory("autonomous_bot_nav")
+    pkg_share = get_package_share_directory("autonomous_nav")
     nav2_share = get_package_share_directory("nav2_bringup")
 
     default_params = os.path.join(pkg_share, "config", "nav2_params.yaml")
@@ -89,7 +89,7 @@ def generate_launch_description():
             raise RuntimeError(
                 f"Map YAML file does not exist: {map_path}\n"
                 "Pass a real map path, for example: "
-                "map:=$PWD/src/autonomous_bot_nav/maps/map.yaml"
+                "map:=$PWD/src/autonomous_nav/maps/map.yaml"
             )
         return []
 

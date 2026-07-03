@@ -13,10 +13,17 @@ Nav2による自律移動
 rosdep install --from-paths src --ignore-src -r -y
 ```
 
+## EMCL2のインストール
+
+```bash
+vcs import src < autonomous_bot.repo
+rosdep install --from-paths src --ignore-src -r -y
+```
+
 ## Build
 
 ```bash
-colcon build --packages-select autonomous_bot_nav emcl2
+colcon build --packages-select autonomous_nav emcl2
 source install/setup.sh
 ```
 
@@ -42,7 +49,7 @@ ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
 #### SLAMを起動
 
 ```bash
-ros2 launch autonomous_bot_nav mapping.launch.py use_sim_time:=true
+ros2 launch autonomous_nav mapping.launch.py use_sim_time:=true
 ```
 
 #### キーボード操作(/cmd_vel)
@@ -53,13 +60,13 @@ ros2 run turtlebot3_teleop teleop_keyboard
 #### 地図の保存
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f src/autonomous_bot_nav/maps/map
+ros2 run nav2_map_server map_saver_cli -f src/autonomous_nav/maps/map
 ```
 
 保存後、次のファイルが作成または更新される
 
-- `src/autonomous_bot_nav/maps/map.yaml`
-- `src/autonomous_bot_nav/maps/map.pgm`
+- `src/autonomous_nav/maps/map.yaml`
+- `src/autonomous_nav/maps/map.pgm`
 
 ### 3. 保存した地図でNav2を起動
 
@@ -71,14 +78,14 @@ ros2 run nav2_map_server map_saver_cli -f src/autonomous_bot_nav/maps/map
 #### Simulator
 
 ```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/turtlebot3.yaml use_sim_time:=true localization:=emcl2
+ros2 launch autonomous_nav navigation.launch.py map:=$PWD/src/autonomous_nav/maps/turtlebot3.yaml use_sim_time:=true localization:=emcl2
 ```
 
 #### Real Robot
 事前作成済みの地図がある場合は，mapパスで指定すること
 
 ```bash
-ros2 launch autonomous_bot_nav navigation.launch.py map:=$PWD/src/autonomous_bot_nav/maps/map.yaml use_sim_time:=false localization:=emcl2
+ros2 launch autonomous_nav navigation.launch.py map:=$PWD/src/autonomous_nav/maps/map.yaml use_sim_time:=false localization:=emcl2
 ```
 
 
@@ -96,7 +103,7 @@ RVizからゴールの2D Poseを指定
 autonomous_bot
 ├── README.md
 └── src
-    ├── autonomous_bot_nav
+    ├── autonomous_nav
     │   ├── config
     │   │   ├── nav2_params.yaml
     │   │   ├── emcl2_params.yaml
@@ -115,7 +122,7 @@ autonomous_bot
 
 ### パッケージ
 
-- `autonomous_bot_nav`
+- `autonomous_nav`
   - このリポジトリ側のナビゲーション設定パッケージ
   - Nav2、SLAM Toolbox、RViz、地図ファイル、起動ファイルをまとめている
   - C++/Pythonノードは持たず、`config`、`launch`、`maps`、`rviz`をインストールする
@@ -126,7 +133,7 @@ autonomous_bot
 
 ### Nav2で使っているもの
 
-`src/autonomous_bot_nav/config/nav2_params.yaml`で、以下のNav2コンポーネントを使っています。
+`src/autonomous_nav/config/nav2_params.yaml`で、以下のNav2コンポーネントを使っています。
 
 - 自己位置推定
   - `localization:=emcl2`の場合: `emcl2`パッケージの`emcl2_node`
@@ -181,7 +188,7 @@ autonomous_bot
 
 ### launchファイル
 
-#### `src/autonomous_bot_nav/launch/mapping.launch.py`
+#### `src/autonomous_nav/launch/mapping.launch.py`
 
 SLAMで地図を作るためのlaunchです。
 
@@ -202,7 +209,7 @@ SLAMで地図を作るためのlaunchです。
 
 このlaunchはGazeboや実機側のロボットドライバは起動しません。別ターミナルでTurtleBot3 Gazeboまたは実機のセンサ・オドメトリ・TFを起動してから使います。
 
-#### `src/autonomous_bot_nav/launch/navigation.launch.py`
+#### `src/autonomous_nav/launch/navigation.launch.py`
 
 保存済み地図を使ってNav2を起動するlaunchです。
 
