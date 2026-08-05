@@ -5,3 +5,4 @@ log/
 __pycache__/
 *.pyc
 AGENTS.md
+src/emcl2_ros2/
