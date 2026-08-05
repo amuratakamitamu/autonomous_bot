@@ -24,7 +24,7 @@ make build
 
 ## 起動
 
-### 1. GazeboでTurtleBot3 Worldを起動
+### 1. GazeboでTurtleBot3 Worldを起動（シミュレータのみ）
 
 ```bash
 make sim
@@ -106,6 +106,43 @@ ros2 launch autonomous_nav navigation.launch.py map:=$PWD/src/autonomous_nav/map
 
 
 RVizの**2D Pose Estimate**で初期位置を指定→Nav2 Goal Poseでゴールを指定可能
+
+#### Raspberry Pi Catの起動方法
+
+- tmux
+
+  ```bash
+  #!/usr/bin/env bash
+  SESSION_NAME="raspicat"
+  if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
+      tmux attach-session -t "${SESSION_NAME}"
+      exit 0
+  fi
+  tmux new-session -d -s "${SESSION_NAME}" -n "raspicat"
+  tmux send-keys -t "${SESSION_NAME}:raspicat.0" \
+      "export ROS_DOMAIN_ID=1; export ROS_LOCALHOST_ONLY=0; ros2 launch raspicat raspicat.launch.py" C-m
+  tmux split-window -h -t "${SESSION_NAME}:raspicat"
+  tmux send-keys -t "${SESSION_NAME}:raspicat.1" \
+      "export ROS_DOMAIN_ID=1; export ROS_LOCALHOST_ONLY=0; ros2 service call /motor_power std_srvs/srv/SetBool '{data: true}'" C-m
+  tmux select-pane -t "${SESSION_NAME}:raspicat.0"
+  tmux attach-session -t "${SESSION_NAME}"
+  ```
+
+- Raspberry Pi Catでros 2立ち上げ
+
+  ```bash
+  export ROS_DOMAIN_ID=1
+  export ROS_LOCALHOST_ONLY=0
+  ros2 launch raspicat raspicat.launch.py
+  ```
+
+- 電源ON（ラップトップから操作可能）
+
+  ```bash
+  export ROS_DOMAIN_ID=1
+  export ROS_LOCALHOST_ONLY=0
+  ros2 service call /motor_power std_srvs/SetBool '{data: true}'
+  ```
 
 ### Waypoint Managerパネル
 
