@@ -109,6 +109,17 @@ RVizの**2D Pose Estimate**で初期位置を指定→Nav2 Goal Poseでゴール
 
 #### Raspberry Pi Catの起動方法
 
+- 接続
+
+  ```bash
+  export ET_NIC_NAME=$(ip -o link show | awk -F': ' '$2 ~ /^en[opsx]/ {print $2}')
+  export PROFILE_NAME=raspicat
+  sudo nmcli connection add type ethernet con-name $PROFILE_NAME ifname $ET_NIC_NAME ipv4.method shared
+  sudo nmcli con up $PROFILE_NAME ifname $ET_NIC_NAME
+  export Raspberry_Pi_IP=$(sudo arp-scan -l -I $ET_NIC_NAME | awk 'NR==3{print $1}')
+  ssh ubuntu@$Raspberry_Pi_IP
+  ```
+
 - tmux
 
   ```bash
@@ -152,6 +163,14 @@ RVizの**2D Pose Estimate**で初期位置を指定→Nav2 Goal Poseでゴール
 ### 4. RVizからゴールを送信
 
 RVizからゴールの2D Poseを指定
+
+## rosbagの収集
+- 外部SSDの接続
+  ```bash
+  sudo mount -o uid="$(id -u)",gid="$(id -g)",umask=022 /dev/sda1 /mnt
+  cd /mnt
+  ./get_rosbag.sh
+  ```
 
 ## Makeコマンド
 ### 

@@ -72,8 +72,11 @@ build: check-ros
 rebuild: check-ros
 	source "$(ROS_SETUP)" && colcon build --symlink-install --cmake-clean-cache --packages-select $(PACKAGES)
 
-dev: build
-	source "$(ROS_SETUP)" && source "$(WORKSPACE_SETUP)" && \
+motor-on: check-ros
+	source "$(ROS_SETUP)" && source "$(WORKSPACE_SETUP)" && ros2 service call /motor_power std_srvs/SetBool '{data: true}'
+
+dev: build motor-on
+	source "$(ROS_SETUP)" && source "$(WORKSPACE_SETUP)" &&\
 		ros2 launch autonomous_nav navigation.launch.py \
 		map:="$(MAP)" use_sim_time:=$(USE_SIM_TIME) localization:=$(LOCALIZATION) use_rviz:=$(USE_RVIZ)
 
