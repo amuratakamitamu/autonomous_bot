@@ -18,6 +18,7 @@
 #include <pluginlib/class_list_macros.hpp>
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/ros_integration/ros_node_abstraction.hpp>
+#include <tf2/exceptions.h>
 #include <yaml-cpp/yaml.h>
 
 namespace initial_pose_preset_panel
@@ -26,6 +27,8 @@ namespace initial_pose_preset_panel
 namespace
 {
 constexpr char kInitialPoseTopic[] = "/initialpose";
+constexpr char kMapFrame[] = "map";
+constexpr char kBaseFrame[] = "base_link";
 
 bool isFinitePose(const geometry_msgs::msg::PoseWithCovarianceStamped & pose)
 {
@@ -51,6 +54,8 @@ void InitialPosePresetPanel::onInitialize()
     return;
   }
   node_ = ros_node_abstraction->get_raw_node();
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
   initial_pose_publisher_ = node_->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     kInitialPoseTopic, rclcpp::QoS(10));
   initial_pose_subscription_ = node_->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
@@ -65,7 +70,7 @@ void InitialPosePresetPanel::onInitialize()
     return;
   }
   refreshPresetCombo();
-  setStatus("Use 2D Pose Estimate, then add the current pose");
+  setStatus("Save a 2D Pose Estimate or the current TF robot pose");
 }
 
 void InitialPosePresetPanel::buildUi()
@@ -89,9 +94,12 @@ void InitialPosePresetPanel::buildUi()
   name_edit_ = new QLineEdit(this);
   name_edit_->setPlaceholderText("Preset name");
   auto * add_button = new QPushButton("Add Current", this);
+  auto * add_robot_button = new QPushButton("Add Robot Pose", this);
   connect(add_button, &QPushButton::clicked, this, &InitialPosePresetPanel::addCurrent);
+  connect(add_robot_button, &QPushButton::clicked, this, &InitialPosePresetPanel::addRobotPose);
   add_row->addWidget(name_edit_);
   add_row->addWidget(add_button);
+  add_row->addWidget(add_robot_button);
   layout->addLayout(add_row);
 }
 
@@ -110,11 +118,41 @@ void InitialPosePresetPanel::applySelected()
 
 void InitialPosePresetPanel::addCurrent()
 {
-  const QString name = name_edit_->text().trimmed();
   if (!current_pose_ || !isFinitePose(*current_pose_)) {
     setStatus("Error: set an initial pose with 2D Pose Estimate first");
     return;
   }
+  addPose(*current_pose_);
+}
+
+void InitialPosePresetPanel::addRobotPose()
+{
+  if (!tf_buffer_) {
+    setStatus("Error: TF listener is unavailable");
+    return;
+  }
+  try {
+    const auto transform = tf_buffer_->lookupTransform(kMapFrame, kBaseFrame, tf2::TimePointZero);
+    geometry_msgs::msg::PoseWithCovarianceStamped pose;
+    pose.header = transform.header;
+    pose.pose.pose.position.x = transform.transform.translation.x;
+    pose.pose.pose.position.y = transform.transform.translation.y;
+    pose.pose.pose.position.z = transform.transform.translation.z;
+    pose.pose.pose.orientation = transform.transform.rotation;
+    // TF has no uncertainty. Use the usual initial-pose defaults: 0.5 m (XY) and ~15 deg (yaw).
+    pose.pose.covariance[0] = 0.25;
+    pose.pose.covariance[7] = 0.25;
+    pose.pose.covariance[35] = 0.0685;
+    addPose(pose);
+  } catch (const tf2::TransformException & exception) {
+    setStatus(QString("Error: cannot transform %1 to %2: %3")
+      .arg(kBaseFrame, kMapFrame, exception.what()));
+  }
+}
+
+void InitialPosePresetPanel::addPose(const geometry_msgs::msg::PoseWithCovarianceStamped & pose)
+{
+  const QString name = name_edit_->text().trimmed();
   if (name.isEmpty()) {
     setStatus("Error: enter a preset name");
     return;
@@ -127,7 +165,7 @@ void InitialPosePresetPanel::addCurrent()
     setStatus("Error: a preset with that name already exists");
     return;
   }
-  presets_.push_back({name_text, *current_pose_});
+  presets_.push_back({name_text, pose});
   QString error;
   if (!savePresets(&error)) {
     presets_.pop_back();

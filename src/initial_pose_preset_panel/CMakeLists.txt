@@ -10,6 +10,8 @@ find_package(geometry_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rviz_common REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Qt5 REQUIRED COMPONENTS Widgets)
 set(CMAKE_AUTOMOC ON)
@@ -22,7 +24,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-ament_target_dependencies(${PROJECT_NAME} geometry_msgs pluginlib rclcpp rviz_common)
+ament_target_dependencies(${PROJECT_NAME} geometry_msgs pluginlib rclcpp rviz_common tf2 tf2_ros)
 target_link_libraries(${PROJECT_NAME} yaml-cpp Qt5::Widgets)
 
 pluginlib_export_plugin_description_file(rviz_common plugin_description.xml)

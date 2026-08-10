@@ -10,6 +10,8 @@
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/panel.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 class QComboBox;
 class QLineEdit;
@@ -28,6 +30,7 @@ public:
 private Q_SLOTS:
   void applySelected();
   void addCurrent();
+  void addRobotPose();
   void deleteSelected();
 
 private:
@@ -38,6 +41,7 @@ private:
   };
 
   void buildUi();
+  void addPose(const geometry_msgs::msg::PoseWithCovarianceStamped & pose);
   void refreshPresetCombo();
   void setStatus(const QString & status);
   QString presetFilePath() const;
@@ -47,6 +51,8 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_subscription_;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::optional<geometry_msgs::msg::PoseWithCovarianceStamped> current_pose_;
   std::vector<Preset> presets_;
 
