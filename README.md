@@ -160,6 +160,11 @@ RVizの**2D Pose Estimate**で初期位置を指定→Nav2 Goal Poseでゴール
 - Nav2起動後、RViz2の**Panels → Add New Panel**から`nav2_waypoint_manager/WaypointManagerPanel`を追加する
 - yaml形式でwaypointの保存と読み込みが可能
 
+### Initial Pose Presetパネル
+
+- RViz2の **2D Pose Estimate** で指定した `/initialpose` を名前付きで保存できる
+- **Panels → Add New Panel**から`initial_pose_preset_panel/InitialPosePresetPanel`を追加する（標準RViz設定では自動追加）
+
 ### 4. RVizからゴールを送信
 
 RVizからゴールの2D Poseを指定

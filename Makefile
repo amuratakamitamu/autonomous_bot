@@ -9,7 +9,7 @@ ROS_SETUP := /opt/ros/$(ROS_DISTRO)/setup.bash
 WORKSPACE_SETUP := install/setup.bash
 
 # ビルド対象のROS 2パッケージ
-PACKAGES := autonomous_slam autonomous_nav emcl2 nav2_waypoint_manager
+PACKAGES := autonomous_slam autonomous_nav emcl2 nav2_waypoint_manager initial_pose_preset_panel
 
 # make devで使用する起動パラメータ
 MAP ?= $(CURDIR)/src/autonomous_nav/maps/map_tsudanuma.yaml
