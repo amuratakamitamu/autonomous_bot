@@ -8,5 +8,5 @@ RViz2の **Panels → Add New Panel** から
 3. プリセットを選び **Apply** を押すと、標準の
    `geometry_msgs/msg/PoseWithCovarianceStamped` を `/initialpose` にpublishします。
 
-プリセットはOSのユーザー設定ディレクトリにある
-`initial_pose_presets.yaml` に自動保存されます。
+プリセットはOSのユーザー設定ディレクトリ内の
+`initial_pose_preset_panel/initialpose/initial_pose_presets.yaml` に自動保存されます。

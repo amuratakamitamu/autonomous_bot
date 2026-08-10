@@ -174,7 +174,7 @@ void InitialPosePresetPanel::refreshPresetCombo()
 QString InitialPosePresetPanel::presetFilePath() const
 {
   const QString config_dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-  return config_dir + "/initial_pose_presets.yaml";
+  return config_dir + "/initial_pose_preset_panel/initialpose/initial_pose_presets.yaml";
 }
 
 bool InitialPosePresetPanel::loadPresets(QString * error)
