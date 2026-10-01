@@ -9,7 +9,7 @@ ROS_SETUP := /opt/ros/$(ROS_DISTRO)/setup.bash
 WORKSPACE_SETUP := install/setup.bash
 
 # ビルド対象のROS 2パッケージ
-PACKAGES := autonomous_slam autonomous_nav emcl2 nav2_waypoint_manager
+PACKAGES := autonomous_slam autonomous_nav emcl2 nav2_waypoint_manager initial_pose_preset_panel
 
 # make devで使用する起動パラメータ
 MAP ?= $(CURDIR)/src/autonomous_nav/maps/map_tsudanuma.yaml
@@ -72,8 +72,11 @@ build: check-ros
 rebuild: check-ros
 	source "$(ROS_SETUP)" && colcon build --symlink-install --cmake-clean-cache --packages-select $(PACKAGES)
 
-dev: build
-	source "$(ROS_SETUP)" && source "$(WORKSPACE_SETUP)" && \
+motor-on: check-ros
+	source "$(ROS_SETUP)" && source "$(WORKSPACE_SETUP)" && ros2 service call /motor_power std_srvs/SetBool '{data: true}'
+
+dev: build motor-on
+	source "$(ROS_SETUP)" && source "$(WORKSPACE_SETUP)" &&\
 		ros2 launch autonomous_nav navigation.launch.py \
 		map:="$(MAP)" use_sim_time:=$(USE_SIM_TIME) localization:=$(LOCALIZATION) use_rviz:=$(USE_RVIZ)
 

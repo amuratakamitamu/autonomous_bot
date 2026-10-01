@@ -24,7 +24,7 @@ make build
 
 ## 起動
 
-### 1. GazeboでTurtleBot3 Worldを起動
+### 1. GazeboでTurtleBot3 Worldを起動（シミュレータのみ）
 
 ```bash
 make sim
@@ -107,14 +107,75 @@ ros2 launch autonomous_nav navigation.launch.py map:=$PWD/src/autonomous_nav/map
 
 RVizの**2D Pose Estimate**で初期位置を指定→Nav2 Goal Poseでゴールを指定可能
 
+#### Raspberry Pi Catの起動方法
+
+- 接続
+
+  ```bash
+  export ET_NIC_NAME=$(ip -o link show | awk -F': ' '$2 ~ /^en[opsx]/ {print $2}')
+  export PROFILE_NAME=raspicat
+  sudo nmcli connection add type ethernet con-name $PROFILE_NAME ifname $ET_NIC_NAME ipv4.method shared
+  sudo nmcli con up $PROFILE_NAME ifname $ET_NIC_NAME
+  export Raspberry_Pi_IP=$(sudo arp-scan -l -I $ET_NIC_NAME | awk 'NR==3{print $1}')
+  ssh ubuntu@$Raspberry_Pi_IP
+  ```
+
+- tmux
+
+  ```bash
+  #!/usr/bin/env bash
+  SESSION_NAME="raspicat"
+  if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
+      tmux attach-session -t "${SESSION_NAME}"
+      exit 0
+  fi
+  tmux new-session -d -s "${SESSION_NAME}" -n "raspicat"
+  tmux send-keys -t "${SESSION_NAME}:raspicat.0" \
+      "export ROS_DOMAIN_ID=1; export ROS_LOCALHOST_ONLY=0; ros2 launch raspicat raspicat.launch.py" C-m
+  tmux split-window -h -t "${SESSION_NAME}:raspicat"
+  tmux send-keys -t "${SESSION_NAME}:raspicat.1" \
+      "export ROS_DOMAIN_ID=1; export ROS_LOCALHOST_ONLY=0; ros2 service call /motor_power std_srvs/srv/SetBool '{data: true}'" C-m
+  tmux select-pane -t "${SESSION_NAME}:raspicat.0"
+  tmux attach-session -t "${SESSION_NAME}"
+  ```
+
+- Raspberry Pi Catでros 2立ち上げ
+
+  ```bash
+  export ROS_DOMAIN_ID=1
+  export ROS_LOCALHOST_ONLY=0
+  ros2 launch raspicat raspicat.launch.py
+  ```
+
+- 電源ON（ラップトップから操作可能）
+
+  ```bash
+  export ROS_DOMAIN_ID=1
+  export ROS_LOCALHOST_ONLY=0
+  ros2 service call /motor_power std_srvs/SetBool '{data: true}'
+  ```
+
 ### Waypoint Managerパネル
 
 - Nav2起動後、RViz2の**Panels → Add New Panel**から`nav2_waypoint_manager/WaypointManagerPanel`を追加する
 - yaml形式でwaypointの保存と読み込みが可能
 
+### Initial Pose Presetパネル
+
+- RViz2の **2D Pose Estimate** で指定した `/initialpose` を名前付きで保存できる
+- **Panels → Add New Panel**から`initial_pose_preset_panel/InitialPosePresetPanel`を追加する（標準RViz設定では自動追加）
+
 ### 4. RVizからゴールを送信
 
 RVizからゴールの2D Poseを指定
+
+## rosbagの収集
+- 外部SSDの接続
+  ```bash
+  sudo mount -o uid="$(id -u)",gid="$(id -g)",umask=022 /dev/sda1 /mnt
+  cd /mnt
+  ./get_rosbag.sh
+  ```
 
 ## Makeコマンド
 ### 
