@@ -26,12 +26,16 @@ class InitialPosePresetPanel : public rviz_common::Panel
 public:
   explicit InitialPosePresetPanel(QWidget * parent = nullptr);
   void onInitialize() override;
+  void load(const rviz_common::Config & config) override;
+  void save(rviz_common::Config config) const override;
 
 private Q_SLOTS:
   void applySelected();
   void addCurrent();
   void addRobotPose();
   void deleteSelected();
+  void openPresetFile();
+  void savePresetFileAs();
 
 private:
   struct Preset
@@ -44,9 +48,8 @@ private:
   void addPose(const geometry_msgs::msg::PoseWithCovarianceStamped & pose);
   void refreshPresetCombo();
   void setStatus(const QString & status);
-  QString presetFilePath() const;
-  bool loadPresets(QString * error);
-  bool savePresets(QString * error) const;
+  bool loadPresets(const QString & filename, QString * error);
+  bool savePresets(const QString & filename, QString * error) const;
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_publisher_;
@@ -55,9 +58,11 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   std::optional<geometry_msgs::msg::PoseWithCovarianceStamped> current_pose_;
   std::vector<Preset> presets_;
+  QString preset_file_path_;
 
   QComboBox * preset_combo_{nullptr};
   QLineEdit * name_edit_{nullptr};
+  QLineEdit * path_edit_{nullptr};
 };
 
 }  // namespace initial_pose_preset_panel
