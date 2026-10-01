@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -16,6 +17,7 @@
 #include <QVBoxLayout>
 
 #include <pluginlib/class_list_macros.hpp>
+#include <rviz_common/config.hpp>
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/ros_integration/ros_node_abstraction.hpp>
 #include <tf2/exceptions.h>
@@ -41,9 +43,37 @@ bool isFinitePose(const geometry_msgs::msg::PoseWithCovarianceStamped & pose)
 }  // namespace
 
 InitialPosePresetPanel::InitialPosePresetPanel(QWidget * parent)
-: rviz_common::Panel(parent)
+: rviz_common::Panel(parent),
+  preset_file_path_(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) +
+  "/initial_pose_preset_panel/initialpose/initial_pose_presets.yaml")
 {
   buildUi();
+}
+
+void InitialPosePresetPanel::load(const rviz_common::Config & config)
+{
+  rviz_common::Panel::load(config);
+  QString path;
+  if (config.mapGetString("Preset File", &path) && !path.isEmpty()) {
+    if (!QFileInfo(path).isFile()) {
+      setStatus("Error: preset file not found: " + path);
+      return;
+    }
+    QString error;
+    if (!loadPresets(path, &error)) {
+      setStatus("Error: " + error);
+      return;
+    }
+    preset_file_path_ = path;
+    path_edit_->setText(path);
+    refreshPresetCombo();
+  }
+}
+
+void InitialPosePresetPanel::save(rviz_common::Config config) const
+{
+  rviz_common::Panel::save(config);
+  config.mapSetValue("Preset File", preset_file_path_);
 }
 
 void InitialPosePresetPanel::onInitialize()
@@ -65,7 +95,7 @@ void InitialPosePresetPanel::onInitialize()
     });
 
   QString error;
-  if (!loadPresets(&error)) {
+  if (!loadPresets(preset_file_path_, &error)) {
     setStatus("Error: " + error);
     return;
   }
@@ -77,6 +107,18 @@ void InitialPosePresetPanel::buildUi()
 {
   auto * layout = new QVBoxLayout(this);
   layout->setContentsMargins(4, 4, 4, 4);
+
+  path_edit_ = new QLineEdit(preset_file_path_, this);
+  path_edit_->setReadOnly(true);
+  layout->addWidget(path_edit_);
+  auto * file_row = new QHBoxLayout();
+  auto * open_button = new QPushButton("Open YAML", this);
+  auto * save_as_button = new QPushButton("Save As...", this);
+  connect(open_button, &QPushButton::clicked, this, &InitialPosePresetPanel::openPresetFile);
+  connect(save_as_button, &QPushButton::clicked, this, &InitialPosePresetPanel::savePresetFileAs);
+  file_row->addWidget(open_button);
+  file_row->addWidget(save_as_button);
+  layout->addLayout(file_row);
 
   preset_combo_ = new QComboBox(this);
   layout->addWidget(preset_combo_);
@@ -167,7 +209,7 @@ void InitialPosePresetPanel::addPose(const geometry_msgs::msg::PoseWithCovarianc
   }
   presets_.push_back({name_text, pose});
   QString error;
-  if (!savePresets(&error)) {
+  if (!savePresets(preset_file_path_, &error)) {
     presets_.pop_back();
     setStatus("Error: " + error);
     return;
@@ -188,7 +230,7 @@ void InitialPosePresetPanel::deleteSelected()
   const Preset removed = presets_[index];
   presets_.erase(presets_.begin() + index);
   QString error;
-  if (!savePresets(&error)) {
+  if (!savePresets(preset_file_path_, &error)) {
     presets_.insert(presets_.begin() + index, removed);
     setStatus("Error: " + error);
     return;
@@ -209,16 +251,51 @@ void InitialPosePresetPanel::refreshPresetCombo()
   }
 }
 
-QString InitialPosePresetPanel::presetFilePath() const
+void InitialPosePresetPanel::openPresetFile()
 {
-  const QString config_dir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
-  return config_dir + "/initial_pose_preset_panel/initialpose/initial_pose_presets.yaml";
+  const QString filename = QFileDialog::getOpenFileName(
+    this, "Open pose presets", preset_file_path_, "YAML files (*.yaml *.yml);;All files (*)");
+  if (filename.isEmpty()) {
+    return;
+  }
+  if (!QFileInfo(filename).isFile()) {
+    setStatus("Error: preset file not found: " + filename);
+    return;
+  }
+  QString error;
+  if (!loadPresets(filename, &error)) {
+    setStatus("Error: " + error);
+    return;
+  }
+  preset_file_path_ = filename;
+  path_edit_->setText(filename);
+  refreshPresetCombo();
+  Q_EMIT configChanged();
+  setStatus("Loaded " + filename);
 }
 
-bool InitialPosePresetPanel::loadPresets(QString * error)
+void InitialPosePresetPanel::savePresetFileAs()
 {
-  const QString filename = presetFilePath();
+  const QString filename = QFileDialog::getSaveFileName(
+    this, "Save pose presets", preset_file_path_, "YAML files (*.yaml *.yml);;All files (*)");
+  if (filename.isEmpty()) {
+    return;
+  }
+  QString error;
+  if (!savePresets(filename, &error)) {
+    setStatus("Error: " + error);
+    return;
+  }
+  preset_file_path_ = filename;
+  path_edit_->setText(filename);
+  Q_EMIT configChanged();
+  setStatus("Saved " + filename);
+}
+
+bool InitialPosePresetPanel::loadPresets(const QString & filename, QString * error)
+{
   if (!QFile::exists(filename)) {
+    presets_.clear();
     return true;
   }
   try {
@@ -264,9 +341,8 @@ bool InitialPosePresetPanel::loadPresets(QString * error)
   return true;
 }
 
-bool InitialPosePresetPanel::savePresets(QString * error) const
+bool InitialPosePresetPanel::savePresets(const QString & filename, QString * error) const
 {
-  const QString filename = presetFilePath();
   if (!QDir().mkpath(QFileInfo(filename).absolutePath())) {
     *error = "cannot create configuration directory";
     return false;
