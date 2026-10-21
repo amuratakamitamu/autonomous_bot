@@ -34,7 +34,6 @@ public:
 
 private Q_SLOTS:
   void deleteSelected();
-  void deleteLast();
   void clearWaypoints();
   void moveUp();
   void moveDown();
@@ -42,6 +41,8 @@ private Q_SLOTS:
   void loadYaml();
   void startFollowing();
   void cancelFollowing();
+  void toggleStop();
+  void resumeFollowing();
   void setStatus(const QString & status);
   void handleResult(int result_code);
 
@@ -55,13 +56,17 @@ private:
   void updateButtons();
   void addClickedPoint(const geometry_msgs::msg::PointStamped & point);
   void addClickedPose(const geometry_msgs::msg::PoseStamped & pose);
+  void sendSegment();
   bool readYamlFile(const QString & filename, std::vector<geometry_msgs::msg::PoseStamped> * poses,
-                    std::string * frame_id, QString * error) const;
+                    std::vector<bool> * stops, std::string * frame_id, QString * error) const;
   bool writeYamlFile(const QString & filename, QString * error) const;
   QString formatWaypoint(int index, const geometry_msgs::msg::PoseStamped & pose) const;
 
   std::string frame_id_{"map"};
   std::vector<geometry_msgs::msg::PoseStamped> waypoints_;
+  std::vector<bool> stop_flags_;  // parallel to waypoints_
+  size_t next_index_{0};  // first waypoint of the next segment; >0 while paused at a stop
+  size_t segment_end_{0};
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
   rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr clicked_point_subscription_;
@@ -73,6 +78,7 @@ private:
   QLabel * status_label_{nullptr};
   QPushButton * start_button_{nullptr};
   QPushButton * cancel_button_{nullptr};
+  QPushButton * resume_button_{nullptr};
 };
 
 }  // namespace nav2_waypoint_manager
