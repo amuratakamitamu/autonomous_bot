@@ -28,6 +28,16 @@ source install/setup.bash
 5. **Start**で登録したWaypointへの巡回を開始
 6. **Cancel**で実行中の巡回を停止
 
+## 停止Waypoint
+
+リストでWaypointを選択し**Toggle Stop**を押すと停止Waypointに設定（リストに`[STOP]`、マーカーが赤で表示）
+
+* 巡回は停止Waypointに到着すると停止
+* **Resume**で次のWaypointから巡回を再開
+* 停止中に**Start**を押すと最初から巡回し直す
+
+YAMLでは各Waypointに`stop: true`として保存（未指定は`false`）
+
 ## Waypointの保存・読込み
 
 WaypointはYAML形式で保存・読込み可能

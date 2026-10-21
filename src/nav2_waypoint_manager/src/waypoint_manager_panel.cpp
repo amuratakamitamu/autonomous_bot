@@ -77,53 +77,46 @@ void WaypointManagerPanel::buildUi()
   auto * layout = new QVBoxLayout(this);
   layout->setContentsMargins(4, 4, 4, 4);
 
-  auto * click_hint = new QLabel(
-    "Select RViz's 2D Goal Pose tool, then click and drag on the map to add a waypoint. "
-    "The click sets the position and the drag direction sets the waypoint orientation.", this);
-  click_hint->setWordWrap(true);
-  layout->addWidget(click_hint);
-
-  auto * delete_row = new QHBoxLayout();
-  auto * delete_selected = new QPushButton("Delete Selected", this);
-  auto * delete_last = new QPushButton("Delete Last", this);
+  auto * edit_row = new QHBoxLayout();
+  auto * delete_selected = new QPushButton("Delete", this);
   auto * clear = new QPushButton("Clear", this);
+  auto * stop_button = new QPushButton("Toggle Stop", this);
   connect(delete_selected, &QPushButton::clicked, this, &WaypointManagerPanel::deleteSelected);
-  connect(delete_last, &QPushButton::clicked, this, &WaypointManagerPanel::deleteLast);
   connect(clear, &QPushButton::clicked, this, &WaypointManagerPanel::clearWaypoints);
-  delete_row->addWidget(delete_selected);
-  delete_row->addWidget(delete_last);
-  delete_row->addWidget(clear);
-  layout->addLayout(delete_row);
+  connect(stop_button, &QPushButton::clicked, this, &WaypointManagerPanel::toggleStop);
+  edit_row->addWidget(delete_selected);
+  edit_row->addWidget(clear);
+  edit_row->addWidget(stop_button);
+  layout->addLayout(edit_row);
 
-  layout->addWidget(new QLabel("Waypoint List", this));
   waypoint_list_ = new QListWidget(this);
   waypoint_list_->setSelectionMode(QAbstractItemView::SingleSelection);
   layout->addWidget(waypoint_list_);
 
-  auto * reorder_row = new QHBoxLayout();
-  auto * up_button = new QPushButton("Move Up", this);
-  auto * down_button = new QPushButton("Move Down", this);
+  auto * order_row = new QHBoxLayout();
+  auto * up_button = new QPushButton("Up", this);
+  auto * down_button = new QPushButton("Down", this);
+  auto * save_button = new QPushButton("Save", this);
+  auto * load_button = new QPushButton("Load", this);
   connect(up_button, &QPushButton::clicked, this, &WaypointManagerPanel::moveUp);
   connect(down_button, &QPushButton::clicked, this, &WaypointManagerPanel::moveDown);
-  reorder_row->addWidget(up_button);
-  reorder_row->addWidget(down_button);
-  layout->addLayout(reorder_row);
-
-  auto * file_row = new QHBoxLayout();
-  auto * save_button = new QPushButton("Save YAML", this);
-  auto * load_button = new QPushButton("Load YAML", this);
   connect(save_button, &QPushButton::clicked, this, &WaypointManagerPanel::saveYaml);
   connect(load_button, &QPushButton::clicked, this, &WaypointManagerPanel::loadYaml);
-  file_row->addWidget(save_button);
-  file_row->addWidget(load_button);
-  layout->addLayout(file_row);
+  order_row->addWidget(up_button);
+  order_row->addWidget(down_button);
+  order_row->addWidget(save_button);
+  order_row->addWidget(load_button);
+  layout->addLayout(order_row);
 
   auto * action_row = new QHBoxLayout();
   start_button_ = new QPushButton("Start", this);
   cancel_button_ = new QPushButton("Cancel", this);
   connect(start_button_, &QPushButton::clicked, this, &WaypointManagerPanel::startFollowing);
   connect(cancel_button_, &QPushButton::clicked, this, &WaypointManagerPanel::cancelFollowing);
+  resume_button_ = new QPushButton("Resume", this);
+  connect(resume_button_, &QPushButton::clicked, this, &WaypointManagerPanel::resumeFollowing);
   action_row->addWidget(start_button_);
+  action_row->addWidget(resume_button_);
   action_row->addWidget(cancel_button_);
   layout->addLayout(action_row);
 
@@ -149,6 +142,7 @@ void WaypointManagerPanel::addClickedPoint(const geometry_msgs::msg::PointStampe
   pose.pose.position = point.point;
   pose.pose.orientation.w = 1.0;
   waypoints_.push_back(pose);
+  stop_flags_.push_back(false);
   refreshList();
   publishMarkers();
   setStatus(QString("Added waypoint %1 from map click").arg(waypoints_.size() - 1));
@@ -167,6 +161,7 @@ void WaypointManagerPanel::addClickedPose(const geometry_msgs::msg::PoseStamped 
 
   frame_id_ = pose.header.frame_id;
   waypoints_.push_back(pose);
+  stop_flags_.push_back(false);
   refreshList();
   publishMarkers();
   setStatus(QString("Added waypoint %1 from click and drag").arg(waypoints_.size() - 1));
@@ -180,17 +175,7 @@ void WaypointManagerPanel::deleteSelected()
     return;
   }
   waypoints_.erase(waypoints_.begin() + index);
-  refreshList();
-  publishMarkers();
-}
-
-void WaypointManagerPanel::deleteLast()
-{
-  if (waypoints_.empty()) {
-    setStatus("Error: no waypoint to delete");
-    return;
-  }
-  waypoints_.pop_back();
+  stop_flags_.erase(stop_flags_.begin() + index);
   refreshList();
   publishMarkers();
 }
@@ -198,6 +183,7 @@ void WaypointManagerPanel::deleteLast()
 void WaypointManagerPanel::clearWaypoints()
 {
   waypoints_.clear();
+  stop_flags_.clear();
   refreshList();
   publishMarkers();
 }
@@ -209,6 +195,7 @@ void WaypointManagerPanel::moveUp()
     return;
   }
   std::swap(waypoints_[index], waypoints_[index - 1]);
+  std::vector<bool>::swap(stop_flags_[index], stop_flags_[index - 1]);
   refreshList();
   waypoint_list_->setCurrentRow(index - 1);
   publishMarkers();
@@ -221,19 +208,32 @@ void WaypointManagerPanel::moveDown()
     return;
   }
   std::swap(waypoints_[index], waypoints_[index + 1]);
+  std::vector<bool>::swap(stop_flags_[index], stop_flags_[index + 1]);
   refreshList();
   waypoint_list_->setCurrentRow(index + 1);
+  publishMarkers();
+}
+
+void WaypointManagerPanel::toggleStop()
+{
+  const int index = waypoint_list_->currentRow();
+  if (index < 0 || index >= static_cast<int>(waypoints_.size())) {
+    setStatus("Error: select a waypoint to toggle stop");
+    return;
+  }
+  stop_flags_[index] = !stop_flags_[index];
+  refreshList();
   publishMarkers();
 }
 
 QString WaypointManagerPanel::formatWaypoint(
   int index, const geometry_msgs::msg::PoseStamped & pose) const
 {
-  return QString("%1: x=%2, y=%3, z=%4")
+  return QString("%1: x=%2, y=%3%4")
          .arg(index)
-         .arg(pose.pose.position.x, 0, 'f', 3)
-         .arg(pose.pose.position.y, 0, 'f', 3)
-         .arg(pose.pose.position.z, 0, 'f', 3);
+         .arg(pose.pose.position.x, 0, 'f', 2)
+         .arg(pose.pose.position.y, 0, 'f', 2)
+         .arg(stop_flags_[index] ? "  [STOP]" : "");
 }
 
 void WaypointManagerPanel::refreshList()
@@ -293,9 +293,9 @@ void WaypointManagerPanel::publishMarkers()
     arrow.scale.x = 0.55;
     arrow.scale.y = 0.12;
     arrow.scale.z = 0.12;
-    arrow.color.r = 0.1F;
-    arrow.color.g = 0.8F;
-    arrow.color.b = 1.0F;
+    arrow.color.r = stop_flags_[i] ? 1.0F : 0.1F;
+    arrow.color.g = stop_flags_[i] ? 0.1F : 0.8F;
+    arrow.color.b = stop_flags_[i] ? 0.1F : 1.0F;
     arrow.color.a = 1.0F;
     markers.markers.push_back(arrow);
 
@@ -313,7 +313,7 @@ void WaypointManagerPanel::publishMarkers()
     label.color.g = 1.0F;
     label.color.b = 1.0F;
     label.color.a = 1.0F;
-    label.text = std::to_string(i);
+    label.text = stop_flags_[i] ? std::to_string(i) + " STOP" : std::to_string(i);
     markers.markers.push_back(label);
   }
   marker_publisher_->publish(markers);
@@ -327,6 +327,9 @@ bool WaypointManagerPanel::writeYamlFile(const QString & filename, QString * err
   for (size_t i = 0; i < waypoints_.size(); ++i) {
     const auto & pose = waypoints_[i].pose;
     out << YAML::BeginMap << YAML::Key << "name" << YAML::Value << "waypoint_" + std::to_string(i);
+    if (stop_flags_[i]) {
+      out << YAML::Key << "stop" << YAML::Value << true;
+    }
     out << YAML::Key << "position" << YAML::Value << YAML::BeginMap;
     out << YAML::Key << "x" << YAML::Value << pose.position.x;
     out << YAML::Key << "y" << YAML::Value << pose.position.y;
@@ -381,7 +384,7 @@ void WaypointManagerPanel::saveYaml()
 
 bool WaypointManagerPanel::readYamlFile(
   const QString & filename, std::vector<geometry_msgs::msg::PoseStamped> * poses,
-  std::string * loaded_frame_id, QString * error) const
+  std::vector<bool> * stops, std::string * loaded_frame_id, QString * error) const
 {
   try {
     const YAML::Node root = YAML::LoadFile(filename.toStdString());
@@ -400,6 +403,7 @@ bool WaypointManagerPanel::readYamlFile(
       return false;
     }
     poses->clear();
+    stops->clear();
     for (const auto & entry : entries) {
       const YAML::Node position = entry["position"];
       const YAML::Node orientation = entry["orientation"];
@@ -426,6 +430,7 @@ bool WaypointManagerPanel::readYamlFile(
         return false;
       }
       poses->push_back(pose);
+      stops->push_back(entry["stop"] && entry["stop"].as<bool>());
     }
   } catch (const YAML::Exception & exception) {
     *error = QString("Invalid YAML: %1").arg(exception.what());
@@ -441,9 +446,10 @@ void WaypointManagerPanel::loadYaml()
     return;
   }
   std::vector<geometry_msgs::msg::PoseStamped> loaded;
+  std::vector<bool> loaded_stops;
   std::string loaded_frame_id;
   QString error;
-  if (!readYamlFile(filename, &loaded, &loaded_frame_id, &error)) {
+  if (!readYamlFile(filename, &loaded, &loaded_stops, &loaded_frame_id, &error)) {
     setStatus("Error: " + error);
     return;
   }
@@ -465,14 +471,17 @@ void WaypointManagerPanel::loadYaml()
         return;
       }
       waypoints_.insert(waypoints_.end(), loaded.begin(), loaded.end());
+      stop_flags_.insert(stop_flags_.end(), loaded_stops.begin(), loaded_stops.end());
     } else if (choice.clickedButton() == replace) {
       waypoints_ = std::move(loaded);
+      stop_flags_ = std::move(loaded_stops);
       frame_id_ = loaded_frame_id;
     } else {
       return;
     }
   } else {
     waypoints_ = std::move(loaded);
+    stop_flags_ = std::move(loaded_stops);
     frame_id_ = loaded_frame_id;
   }
   refreshList();
@@ -490,12 +499,32 @@ void WaypointManagerPanel::startFollowing()
     setStatus("Error: frame_id is not set");
     return;
   }
+  next_index_ = 0;
+  sendSegment();
+}
+
+void WaypointManagerPanel::resumeFollowing()
+{
+  if (next_index_ == 0 || next_index_ >= waypoints_.size()) {
+    setStatus("Error: not paused at a stop waypoint");
+    return;
+  }
+  sendSegment();
+}
+
+// Sends waypoints from next_index_ up to and including the next stop waypoint (or the last one).
+void WaypointManagerPanel::sendSegment()
+{
   if (!action_client_ || !action_client_->action_server_is_ready()) {
     setStatus("Error: /navigate_through_poses action server is unavailable");
     return;
   }
+  segment_end_ = next_index_;
+  while (segment_end_ + 1 < waypoints_.size() && !stop_flags_[segment_end_]) {
+    ++segment_end_;
+  }
   NavigateThroughPoses::Goal goal;
-  goal.poses = waypoints_;
+  goal.poses.assign(waypoints_.begin() + next_index_, waypoints_.begin() + segment_end_ + 1);
   for (auto & pose : goal.poses) {
     pose.header.frame_id = frame_id_;
     pose.header.stamp = node_->now();
@@ -510,7 +539,8 @@ void WaypointManagerPanel::startFollowing()
           panel->setStatus("Error: NavigateThroughPoses goal was rejected");
         } else {
           panel->active_goal_ = goal_handle;
-          panel->setStatus("Navigating through waypoints");
+          panel->setStatus(QString("Navigating waypoints %1-%2")
+            .arg(panel->next_index_).arg(panel->segment_end_));
         }
         panel->updateButtons();
       }, Qt::QueuedConnection);
@@ -525,6 +555,7 @@ void WaypointManagerPanel::startFollowing()
   action_client_->async_send_goal(goal, options);
   setStatus("Sending NavigateThroughPoses goal...");
   start_button_->setEnabled(false);
+  resume_button_->setEnabled(false);
 }
 
 void WaypointManagerPanel::cancelFollowing()
@@ -541,8 +572,18 @@ void WaypointManagerPanel::handleResult(int result_code)
 {
   active_goal_.reset();
   if (result_code == static_cast<int>(rclcpp_action::ResultCode::SUCCEEDED)) {
-    setStatus("Succeeded");
-  } else if (result_code == static_cast<int>(rclcpp_action::ResultCode::CANCELED)) {
+    next_index_ = segment_end_ + 1;
+    if (next_index_ < waypoints_.size()) {
+      setStatus(QString("Stopped at waypoint %1. Press Resume to continue").arg(segment_end_));
+    } else {
+      next_index_ = 0;
+      setStatus("Succeeded");
+    }
+    updateButtons();
+    return;
+  }
+  next_index_ = 0;
+  if (result_code == static_cast<int>(rclcpp_action::ResultCode::CANCELED)) {
     setStatus("Canceled");
   } else if (result_code == static_cast<int>(rclcpp_action::ResultCode::ABORTED)) {
     setStatus("Failed (aborted)");
@@ -561,6 +602,7 @@ void WaypointManagerPanel::updateButtons()
 {
   start_button_->setEnabled(!waypoints_.empty() && !active_goal_ && action_client_);
   cancel_button_->setEnabled(static_cast<bool>(active_goal_));
+  resume_button_->setEnabled(!active_goal_ && next_index_ > 0 && next_index_ < waypoints_.size());
 }
 
 }  // namespace nav2_waypoint_manager
